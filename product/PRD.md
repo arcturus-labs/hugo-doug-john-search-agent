@@ -90,9 +90,6 @@ Wraps the normal search behind an LLM agent loop.
 - Both plug into the same eval harness with no code changes to the harness
 - Code is clean enough to use as a teaching/demo artifact
 
-## Still to do
-- create a new branch that does more complex search that has inputs of name, description, and category
-
 # Talk outline
 - State Goals (below) and big lessons 1) it's (probably) easy to wrap a search API in an agent and get better results 2) but you need to have evals to make sure you're moving in the right direction
 - Pieces

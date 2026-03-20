@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Evaluate plain BM25 or agentic search on WANDS using NDCG.
+"""Evaluate plain BM25, advanced BM25, or agentic search on WANDS using NDCG.
 
 Builds the index once, runs queries in parallel, then reports per-query
 and mean NDCG@k.
 
 Usage:
     uv run python scripts/run_eval.py --type plain
+    uv run python scripts/run_eval.py --type advanced
     uv run python scripts/run_eval.py --type agent
     uv run python scripts/run_eval.py --type agent --num-queries 5 --workers 3 --seed 7
 """
@@ -20,6 +21,8 @@ from search_agent.data import load_judgments, load_products, load_queries
 from search_agent.evaluate import grade_results, ndcg_per_query
 from search_agent.search import build_index
 from search_agent.search import search as bm25_search
+from search_agent.advanced_search import build_index as advanced_build_index
+from search_agent.advanced_search import advanced_search
 
 
 def run_parallel(
@@ -73,8 +76,8 @@ def main():
     )
     parser.add_argument(
         "--type",
-        choices=["plain", "agent"],
-        help="Search type: 'plain' (BM25) or 'agent' (LLM agentic). Default: plain",
+        choices=["plain", "advanced", "agent"],
+        help="Search type: 'plain' (BM25), 'advanced' (BM25 with hierarchical category index), or 'agent' (LLM agentic). Default: plain",
     )
     parser.add_argument(
         "--num-queries", type=int, default=10,
@@ -105,13 +108,21 @@ def main():
         .reset_index(drop=True)
     )
 
-    print(f"Building BM25 index over {len(products):,} products...")
-    index = build_index(products)
-    print("Index ready.\n")
+    if args.type == "advanced":
+        print(f"Building advanced BM25 index over {len(products):,} products...")
+        index = advanced_build_index(products)
+        print("Index ready.\n")
+    else:
+        print(f"Building BM25 index over {len(products):,} products...")
+        index = build_index(products)
+        print("Index ready.\n")
 
     if args.type == "plain":
         def search_fn(query: str, k: int = 10):
             return bm25_search(query, index, k=k)
+    elif args.type == "advanced":
+        def search_fn(query: str, k: int = 10):
+            return advanced_search(index, title_query=query, description_query=query, k=k)
     else:
         from search_agent.agent import agent_search
         def search_fn(query: str, k: int = 10):

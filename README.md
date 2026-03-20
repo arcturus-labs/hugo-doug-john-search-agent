@@ -17,6 +17,10 @@ Both plain search and agentic search share the same external interface — keywo
 
 BM25 over WANDS product titles and descriptions using [`searcharray`](https://github.com/softwaredoug/searcharray) with a Snowball stemmer. Serves as the baseline and also as the tool the agent calls.
 
+### Advanced search
+
+An enhanced BM25 baseline that also indexes the product category field using a hierarchical tokenizer. A category path like `Furniture/Living Room/Sofas` is indexed as the cumulative prefixes `["Furniture", "Furniture/Living Room", "Furniture/Living Room/Sofas"]`, so queries at any level of the hierarchy match all nested products. The search function accepts separate `title_query`, `description_query`, and `category_filter` arguments, making it the intended backing search API for a more capable agentic search that can target individual fields.
+
 ### Agentic search
 
 Wraps BM25 behind an LLM loop (OpenAI Agents SDK). The agent receives the original query, issues one or more keyword searches, inspects results, refines queries, and returns a final ranked list as structured output. All traces are logged to `logs/agent_trace.jsonl`.
@@ -47,6 +51,9 @@ The WANDS dataset is downloaded automatically on first use (gitignored).
 # Plain BM25
 uv run python -m search_agent.search
 
+# Advanced BM25 (hierarchical category index)
+uv run python -m search_agent.advanced_search
+
 # Agentic search
 uv run python -m search_agent.agent
 ```
@@ -57,6 +64,9 @@ uv run python -m search_agent.agent
 # Baseline: plain BM25
 uv run python scripts/run_eval.py --type plain
 
+# Advanced BM25
+uv run python scripts/run_eval.py --type advanced
+
 # Agentic search
 uv run python scripts/run_eval.py --type agent
 
@@ -66,7 +76,7 @@ uv run python scripts/run_eval.py --type agent --num-queries 20 --workers 5 --se
 
 | Flag | Default | Description |
 |---|---|---|
-| `--type` | `plain` | `plain` (BM25) or `agent` (LLM) |
+| `--type` | `plain` | `plain` (BM25), `advanced` (hierarchical BM25), or `agent` (LLM) |
 | `--num-queries` | `10` | Number of queries to sample |
 | `--seed` | `42` | Random seed for query sampling |
 | `--k` | `10` | Ranking depth for NDCG |
@@ -103,8 +113,9 @@ The selector format is `trace.message` — either part can be omitted to mean "a
 .
 ├── src/search_agent/
 │   ├── data.py         # WANDS loader (auto-downloads on first use)
-│   ├── search.py       # BM25 search
-│   ├── agent.py        # agentic search (same API as search.py)
+│   ├── search.py          # plain BM25 search
+│   ├── advanced_search.py # BM25 with hierarchical category index
+│   ├── agent.py           # agentic search (same API as search.py)
 │   └── evaluate.py     # NDCG harness
 ├── scripts/
 │   ├── run_eval.py     # parallel eval runner
