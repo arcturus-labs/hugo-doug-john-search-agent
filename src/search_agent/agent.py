@@ -12,7 +12,10 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from dotenv import load_dotenv
 import pandas as pd
+
+load_dotenv()
 from agents import Agent, Runner, function_tool
 from agents.items import ToolCallItem, ToolCallOutputItem, MessageOutputItem
 from pydantic import BaseModel
@@ -38,7 +41,9 @@ SYSTEM_PROMPT = """\
 You are a product search assistant. Given a user query, use the search tool \
 to find the most relevant products. You may search multiple times with \
 different keywords. When you are satisfied, return the product IDs of the \
-best matches in order from most to least relevant.\
+best matches in order from most to least relevant.
+
+Always make a single search first, and then based upon what you learned make a parallel search for the best next candidates.
 """
 
 
@@ -193,7 +198,7 @@ if __name__ == "__main__":
     index = build_index(products)
     print("Index ready.\n")
 
-    query = "blue sectional sofa"
+    query = "desk lamp"
     print(f"Query: '{query}'\n")
     results = agent_search(query, index, k=5)
     print("\nFinal results:")
