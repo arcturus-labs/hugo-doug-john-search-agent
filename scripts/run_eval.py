@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
@@ -57,7 +58,9 @@ def run_parallel(
                 all_rows.extend(future.result())
                 print(f"  done: {query_text!r}")
             except Exception as e:
-                print(f"  error on {query_text!r}: {e}")
+                print(f"\nFatal error on {query_text!r}: {e}", file=sys.stderr)
+                executor.shutdown(cancel_futures=True)
+                sys.exit(1)
 
     results_df = pd.DataFrame(all_rows)
     graded = grade_results(judg, results_df, k=k)

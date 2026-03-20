@@ -9,6 +9,8 @@ all tool calls and responses) as a single JSON line to logs/agent_trace.jsonl.
 """
 
 import json
+import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -23,6 +25,12 @@ from pydantic import BaseModel
 from search_agent.search import search as bm25_search
 
 LOGS_DIR = Path(__file__).parent.parent.parent / "logs"
+
+MAX_RETRIES = 3
+RETRY_BASE_DELAY = 1.0  # seconds; doubles each attempt (1s, 2s, 4s)
+
+# Default: OpenAI mini-tier model (override via `model=` or SEARCH_AGENT_MODEL).
+DEFAULT_AGENT_MODEL = "gpt-5.4-mini"
 
 # ---------------------------------------------------------------------------
 # Structured output schema
@@ -47,8 +55,20 @@ Always make a single search first, and then based upon what you learned make a p
 """
 
 
-def make_agent(index: pd.DataFrame) -> Agent:
-    """Build a search agent with a BM25 search tool backed by the given index."""
+def _resolve_model(model: str | None) -> str:
+    if model is not None:
+        return model
+    return os.environ.get("SEARCH_AGENT_MODEL", DEFAULT_AGENT_MODEL)
+
+
+def make_agent(index: pd.DataFrame, model: str | None = None) -> Agent:
+    """Build a search agent with a BM25 search tool backed by the given index.
+
+    Args:
+        index: Product DataFrame for BM25 search.
+        model: OpenAI model name. If omitted, uses env ``SEARCH_AGENT_MODEL`` or
+            ``DEFAULT_AGENT_MODEL`` (``gpt-4o-mini``).
+    """
 
     @function_tool
     def search_products(query: str) -> str:
@@ -69,6 +89,7 @@ def make_agent(index: pd.DataFrame) -> Agent:
     return Agent(
         name="ProductSearchAgent",
         instructions=SYSTEM_PROMPT,
+        model=_resolve_model(model),
         tools=[search_products],
         output_type=ProductRanking,
     )
@@ -143,7 +164,9 @@ def _print_trace(query: str, result) -> None:
 # Agentic search — same API as search.search()
 # ---------------------------------------------------------------------------
 
-def agent_search(query: str, index: pd.DataFrame, k: int = 10) -> list[dict]:
+def agent_search(
+    query: str, index: pd.DataFrame, k: int = 10, model: str | None = None
+) -> list[dict]:
     """Agentic BM25 search with the same return format as search.search().
 
     The agent may issue multiple searches internally before returning a ranked
@@ -154,13 +177,30 @@ def agent_search(query: str, index: pd.DataFrame, k: int = 10) -> list[dict]:
         query: keyword query string
         index: DataFrame with searcharray index columns (from build_index)
         k:     maximum number of results to return
+        model: LLM model id; same resolution as ``make_agent``.
 
     Returns:
         List of dicts with keys: product_id, title, description, category, score
         ordered by agent-ranked relevance.
     """
-    agent = make_agent(index)
-    result = Runner.run_sync(agent, query)
+    agent = make_agent(index, model=model)
+
+    last_exc: Exception | None = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            result = Runner.run_sync(agent, query)
+            break
+        except Exception as exc:
+            last_exc = exc
+            if attempt < MAX_RETRIES - 1:
+                delay = RETRY_BASE_DELAY * (2 ** attempt)
+                print(f"  [retry {attempt + 1}/{MAX_RETRIES}] {exc} — retrying in {delay:.0f}s...")
+                time.sleep(delay)
+    else:
+        raise RuntimeError(
+            f"agent_search failed after {MAX_RETRIES} retries for query {query!r}"
+        ) from last_exc
+
     ranking: ProductRanking = result.final_output_as(ProductRanking)
 
     _print_trace(query, result)
