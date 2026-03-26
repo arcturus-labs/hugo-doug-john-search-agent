@@ -178,6 +178,7 @@ def advanced_search(
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    # python -m search_agent.advanced_search
     print("Loading WANDS products...")
     products = load_products()
     print(f"Loaded {len(products):,} products.\n")
@@ -197,9 +198,6 @@ if __name__ == "__main__":
         output = advanced_search(index, title_query=query, description_query=query, category_filter=cat_filter, k=5)
         filter_str = f" [filter: {cat_filter}]" if cat_filter else ""
         print(f"Query: '{query}'{filter_str}")
-        for r in output["results"]:
-            print(f"  [{r['score']:6.2f}] ({r['category']}) {r['title']}")
-        print("  Facets:")
-        for term, cnt in output["facets"]:
-            print(f"    {term} ({cnt})")
+        import json
+        print(json.dumps(output, indent=2))
         print()
